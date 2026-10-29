@@ -1,5 +1,8 @@
 # TerritoryMobBlocker
 
+[![Build](https://github.com/owoser/TerritoryMobBlocker/actions/workflows/build.yml/badge.svg)](https://github.com/owoser/TerritoryMobBlocker/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/owoser/TerritoryMobBlocker)](https://github.com/owoser/TerritoryMobBlocker/releases)
+
 > 基于 **LeviLamina 26.51.\*** 的原生插件，用于补全 **PLand** 领地系统中「环境权限 → 怪物生成」对 **Addons 自定义生物** 的拦截盲区。
 
 ---
@@ -247,6 +250,8 @@ TerritoryMobBlocker/
 
 ## 7. 构建
 
+### 本地构建
+
 ```bash
 xmake repo -u
 xmake f -y -p windows -a x64 -m release
@@ -256,6 +261,23 @@ xmake
 产物：`bin/TerritoryMobBlocker/{TerritoryMobBlocker.dll, TerritoryMobBlocker.pdb, manifest.json}`
 
 > **版本锁定说明**：`levilamina` 锁定 `26.51.6`。`26.51.9` 的 SDK 包在当前工具链下自身编译失败（`MinecraftCommands` 前置声明不完整导致 `unique_ptr<CommandRegistry>` 析构报错），因此不使用浮动版本 `26.51.*`。
+
+### CI / 自动发布
+
+| 工作流 | 触发 | 行为 |
+| --- | --- | --- |
+| [`build.yml`](.github/workflows/build.yml) | push 到 `main` / PR / 手动 | 配置 + 构建，上传 `TerritoryMobBlocker-windows-x64` artifact 作为构建验证 |
+| [`release.yml`](.github/workflows/release.yml) | 推送 `v*` tag / 手动 | 构建 → 打包 `TerritoryMobBlocker-<ver>.zip` → 创建或更新 Release，正文自动从 `CHANGELOG.md` 对应版本段落提取 |
+
+发版流程因此只剩两步：
+
+```bash
+# 1. 在 CHANGELOG.md 顶部加一节 "## 1.1.0"
+git add -A && git commit -m "chore: release 1.1.0"
+git tag v1.1.0 && git push origin main --tags      # 2. 推送 tag，CI 自动出包
+```
+
+版本号由 tag 派生（`v1.1.0` → `1.1.0`），通过环境变量 `TMB_VERSION` 注入 `xmake.lua` 写入 `manifest.json`，**不需要手工改版本号**；本地构建未设置该变量时回退为 `1.0.0`。带连字符的 tag（如 `v1.1.0-beta.1`）会自动标记为预发布。
 
 ---
 

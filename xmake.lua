@@ -37,6 +37,10 @@ option("target_type")
     set_values("server", "client")
 option_end()
 
+-- 版本号：CI 通过环境变量 TMB_VERSION 注入（取自 tag，如 v1.1.0），本地构建回退到 1.0.0。
+-- 这样打 tag 就是版本号的唯一来源，不用同时改 xmake.lua / tooth.json。
+local tmbVersion = (os.getenv("TMB_VERSION") or "1.0.0"):gsub("^[vV]", "")
+
 target("TerritoryMobBlocker")
     set_default(true)
     add_rules("@levibuildscript/linkrule")
@@ -47,7 +51,7 @@ target("TerritoryMobBlocker")
         pluginName = "TerritoryMobBlocker",
         modName    = "TerritoryMobBlocker",
         modFile    = "TerritoryMobBlocker.dll",
-        modVersion = "1.0.0"
+        modVersion = tmbVersion
     })
 
     if is_plat("windows") then

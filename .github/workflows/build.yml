@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (windows-x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+
+      - name: Install LLVM (clang-cl)
+        run: choco install llvm -y --no-progress
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          xmake --version
+          clang-cl --version
+
+      # LeviLamina SDK 需要源码构建，缓存 xmake 包目录可把后续构建从数十分钟降到分钟级
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/.xmake
+          key: xmake-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
+          restore-keys: |
+            xmake-${{ runner.os }}-
+
+      - name: Update xmake repositories
+        run: xmake repo -u
+
+      - name: Configure
+        run: xmake f -p windows -a x64 -m release --toolchain=clang-cl -y
+
+      - name: Build
+        run: xmake -y
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TerritoryMobBlocker-windows-x64
+          path: |
+            bin/TerritoryMobBlocker/TerritoryMobBlocker.dll
+            bin/TerritoryMobBlocker/manifest.json
+          if-no-files-found: error

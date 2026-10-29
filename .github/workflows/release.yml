@@ -1,0 +1,126 @@
+name: Release
+
+# 打 tag 即发布：推送 v1.2.3 会自动构建、打包并创建 / 更新对应 Release。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (windows-x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+
+      - name: Install LLVM (clang-cl)
+        run: choco install llvm -y --no-progress
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          xmake --version
+          clang-cl --version
+
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/.xmake
+          key: xmake-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
+          restore-keys: |
+            xmake-${{ runner.os }}-
+
+      - name: Update xmake repositories
+        run: xmake repo -u
+
+      - name: Configure
+        run: xmake f -p windows -a x64 -m release --toolchain=clang-cl -y
+        env:
+          TMB_VERSION: ${{ github.ref_name }}
+
+      - name: Build
+        run: xmake -y
+        env:
+          TMB_VERSION: ${{ github.ref_name }}
+
+      # bin/ 里同时有 .pdb，发布包只需要 dll + manifest.json
+      - name: Package (TerritoryMobBlocker/{dll,manifest.json})
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package/TerritoryMobBlocker | Out-Null
+          Copy-Item bin/TerritoryMobBlocker/TerritoryMobBlocker.dll package/TerritoryMobBlocker/
+          Copy-Item bin/TerritoryMobBlocker/manifest.json           package/TerritoryMobBlocker/
+          Get-ChildItem -Recurse package | Select-Object FullName, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TerritoryMobBlocker-windows-x64
+          path: package/TerritoryMobBlocker
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TerritoryMobBlocker-windows-x64
+          path: package/TerritoryMobBlocker
+
+      # 从 CHANGELOG.md 里取当前版本段落作为 Release 正文
+      - name: Extract release notes
+        run: |
+          set -euo pipefail
+          awk -v ver="$VERSION" '
+            $0 ~ "^##[[:space:]]+" ver "([[:space:]]|$)" { found = 1; next }
+            found && /^##[[:space:]]/ { exit }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+
+          if [ ! -s release_notes.md ]; then
+            echo "CHANGELOG.md 中没有找到 $VERSION 段落，使用占位说明"
+            printf 'TerritoryMobBlocker %s\n\n详见 [CHANGELOG.md](CHANGELOG.md)。\n' "$VERSION" > release_notes.md
+          fi
+          echo '--- release notes ---'
+          cat release_notes.md
+
+      - name: Package zip
+        run: |
+          set -euo pipefail
+          cd package
+          zip -r "../TerritoryMobBlocker-${VERSION}.zip" TerritoryMobBlocker
+          cd ..
+          unzip -l "TerritoryMobBlocker-${VERSION}.zip"
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TerritoryMobBlocker ${{ env.VERSION }}
+          body_path: release_notes.md
+          files: TerritoryMobBlocker-${{ env.VERSION }}.zip
+          fail_on_unmatched_files: true
+          # v1.1.0-beta.1 这类带连字符的 tag 自动标记为预发布
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          draft: false
