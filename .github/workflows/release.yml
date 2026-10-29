@@ -23,8 +23,9 @@ jobs:
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
 
-      - name: Install LLVM 19 (clang-cl)
-        run: choco install llvm --version=19.1.5 -y --no-progress --allow-downgrade
+      # runner 镜像自带 VS 2026 (MSVC 14.51)，其 STL 要求 Clang >= 20，因此不锁定 LLVM 小版本。
+      - name: Install LLVM (clang-cl)
+        run: choco install llvm -y --no-progress
 
       - name: Show toolchain
         shell: pwsh

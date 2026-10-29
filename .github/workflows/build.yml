@@ -22,10 +22,9 @@ jobs:
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
 
-      # 与本地验证过的工具链保持一致：LeviLamina 26.51.6 的 SDK 源码在 clang 19 下可正常构建，
-      # 更新的 clang 会因源码中的 `typename` 用法告警/报错而失败，故显式锁定版本。
-      - name: Install LLVM 19 (clang-cl)
-        run: choco install llvm --version=19.1.5 -y --no-progress --allow-downgrade
+      # runner 镜像自带 VS 2026 (MSVC 14.51)，其 STL 要求 Clang >= 20，因此不锁定 LLVM 小版本。
+      - name: Install LLVM (clang-cl)
+        run: choco install llvm -y --no-progress
 
       - name: Show toolchain
         shell: pwsh
