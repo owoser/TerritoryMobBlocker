@@ -14,7 +14,11 @@ concurrency:
 jobs:
   build:
     name: Build (windows-x64)
-    runs-on: windows-latest
+    # 必须用 windows-2022（VS 2022 / MSVC 14.4x）。
+    # windows-latest 现在是 VS 2026（MSVC 14.51），其 STL 对不完整类型的 unique_ptr
+    # 检查更严格，会直接让 LeviLamina 26.51.6 的 MinecraftCommands 析构报错：
+    #   error: invalid application of 'sizeof' to an incomplete type 'CommandRegistry'
+    runs-on: windows-2022
 
     steps:
       - name: Checkout
@@ -23,7 +27,6 @@ jobs:
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
 
-      # runner 镜像自带 VS 2026 (MSVC 14.51)，其 STL 要求 Clang >= 20，因此不锁定 LLVM 小版本。
       - name: Install LLVM (clang-cl)
         run: choco install llvm -y --no-progress
 
