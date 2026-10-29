@@ -277,6 +277,26 @@ xmake
 > 上游修好后：删掉 `xmake-repo-extra/` 目录，并移除 `xmake.lua` 里的
 > `add_repositories("tmb-extra xmake-repo-extra")` 这一行，即回到官方源码构建。
 
+#### 为什么 SDK 是 26.51.6，而不是最新的 26.51.9？
+
+因为**没有** 26.51.9 的 SDK 可以拿到：
+
+| 来源 | 结果 |
+| --- | --- |
+| 从源码构建（xmake-repo 官方包） | ✗ 26.51.6 与 26.51.9 **都**编译失败，同一个 incomplete type 错误 |
+| 官方 Release 附件 | ✗ 只有运行期 DLL，**不含** `include/` 与 `LeviLamina.lib` |
+| 官方 Actions 产物 | ✗ 只有文档站（doxygen / pages），没有 SDK 包 |
+
+26.51.6 的 SDK 是这台机器在 2026-10-11 构建成功留下的产物，是唯一可用的 SDK。
+它在**符号层面与 26.51.8 / 26.51.9 兼容**：
+
+- 本插件 DLL 从 `LeviLamina.dll` 导入 **37 个**导出符号；
+- 逐条比对 26.51.8（线上服务器）与 26.51.9（最新版）的 LeviLamina.dll 导出表，**全部命中**；
+- 实测已在 26.51.8 的服务器上正常运行。
+
+等上游修好 `MinecraftCommands.h`、本机能重新 `xmake f` 之后，用
+`tools/build-sdk.ps1 -Version 26.51.9` 重新打包 SDK 并更新包定义里的 sha256 即可升级。
+
 ### CI / 自动发布
 
 | 工作流 | 触发 | 行为 |
