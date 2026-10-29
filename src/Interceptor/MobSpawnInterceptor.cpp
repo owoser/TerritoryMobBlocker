@@ -2,7 +2,7 @@
 
 #include "Config/ConfigManager.h"
 #include "Interceptor/MobMatcher.h"
-#include "Pland/PlandBridge.h"
+#include "Interceptor/SpawnJudge.h"
 #include "logger.h"
 
 #include "ll/api/event/EventBus.h"
@@ -15,20 +15,9 @@
 #include "mc/world/level/BlockPos.h"
 #include "mc/world/level/BlockSource.h"
 
-#include <cmath>
-
 namespace tmb {
 
 namespace {
-
-/// Vec3 -> 方块坐标（与 PLand 内部一致，使用 floor 而非截断）
-BlockPos toBlockPos(Vec3 const& pos) {
-    return BlockPos{
-        static_cast<int>(std::floor(pos.x)),
-        static_cast<int>(std::floor(pos.y)),
-        static_cast<int>(std::floor(pos.z))
-    };
-}
 
 /// 判断本次生成是否需要处理（前置/后置开关）
 bool shouldHandle(ll::event::SpawnMobEvent const& ev, Config const& config) {
@@ -62,6 +51,7 @@ bool MobSpawnInterceptor::enable() {
     // ---------------------------------------------------------------------
     // 一、前置拦截：BedrockSpawner::spawnMob 执行前触发，cancel() 后不会创建实体
     //     —— 零实体、零网络包开销，是首选通道。
+    //     覆盖：自然刷怪 / 刷怪笼 / /summon / 刷怪蛋 / 组件骑手。
     // ---------------------------------------------------------------------
     mSpawningListener = bus.emplaceListener<ll::event::SpawningMobEvent>([](ll::event::SpawningMobEvent& ev) {
         auto const& config = ConfigManager::getInstance().get();
@@ -72,43 +62,35 @@ bool MobSpawnInterceptor::enable() {
         auto const& fullName = ev.identifier().mFullName.get();
         auto&       matcher  = MobMatcher::getInstance();
         if (!matcher.isBlocked(fullName)) {
-            return;
-        }
-
-        auto& bridge = pland::PlandBridge::getInstance();
-        if (!bridge.ensureAvailable()) {
-            return; // PLand 尚不可用（带冷却的惰性重探已由 ensureAvailable 负责）
+            return; // 名单外，放行（绝大多数情况，不做任何领地查询）
         }
 
         BlockPos blockPos = toBlockPos(ev.pos());
         int      dimId     = static_cast<int>(ev.blockSource().getDimensionId());
 
-        auto land = bridge.landAt(blockPos, dimId);
-        if (!land || !land->exists) {
-            return; // 荒野，放行
+        auto verdict = judgeSpawn(fullName, blockPos, dimId);
+        if (!verdict.block) {
+            return; // 荒野或领地允许生成
         }
 
-        // 领地关闭「怪物生成」时，拦截配置名单内的生物
-        if (!land->allowMonsterSpawn) {
-            ev.cancel();
-            if (config.log_blocked_spawns) {
-                logger.info(
-                    "已拦截领地「{}」(#{} 维度{}) 内的自定义生物生成: {} @({}, {}, {})",
-                    land->name,
-                    land->id,
-                    dimId,
-                    MobMatcher::normalizeIdentifier(fullName),
-                    blockPos.x,
-                    blockPos.y,
-                    blockPos.z
-                );
-            }
+        ev.cancel();
+        if (config.log_blocked_spawns) {
+            logger.info(
+                "已拦截领地「{}」(#{} 维度{}) 内的自定义生物生成: {} @({}, {}, {})",
+                verdict.landName,
+                verdict.landId,
+                dimId,
+                verdict.mobId,
+                blockPos.x,
+                blockPos.y,
+                blockPos.z
+            );
         }
     });
 
     // ---------------------------------------------------------------------
-    // 二、后置兜底：实体已经创建（刷怪蛋 / 指令 / 生成器 / 组件骑手等非标准路径，
-    //     以及某些在 population 管线之外绕过前置事件的生成方式）
+    // 二、后置兜底：同一挂钩点的「实体已创建」分支（SpawnedMobEvent）。
+    //     少数路径会绕过前置事件，这里按需清理。
     // ---------------------------------------------------------------------
     mSpawnedListener = bus.emplaceListener<ll::event::SpawnedMobEvent>([](ll::event::SpawnedMobEvent& ev) {
         auto const& config = ConfigManager::getInstance().get();
@@ -127,38 +109,31 @@ bool MobSpawnInterceptor::enable() {
             return;
         }
 
-        auto& bridge = pland::PlandBridge::getInstance();
-        if (!bridge.ensureAvailable()) {
-            return;
-        }
-
         BlockPos blockPos = toBlockPos(mob->getPosition());
         int      dimId     = mob->getDimensionId();
 
-        auto land = bridge.landAt(blockPos, dimId);
-        if (!land || !land->exists) {
+        auto verdict = judgeSpawn(typeName, blockPos, dimId);
+        if (!verdict.block) {
             return;
         }
 
-        if (!land->allowMonsterSpawn) {
-            mob->despawn();
-            if (config.log_blocked_spawns) {
-                logger.info(
-                    "已后置清除领地「{}」(#{} 维度{}) 内的自定义生物: {} @({}, {}, {})",
-                    land->name,
-                    land->id,
-                    dimId,
-                    MobMatcher::normalizeIdentifier(typeName),
-                    blockPos.x,
-                    blockPos.y,
-                    blockPos.z
-                );
-            }
+        mob->despawn();
+        if (config.log_blocked_spawns) {
+            logger.info(
+                "已后置清除领地「{}」(#{} 维度{}) 内的自定义生物: {} @({}, {}, {})",
+                verdict.landName,
+                verdict.landId,
+                dimId,
+                verdict.mobId,
+                blockPos.x,
+                blockPos.y,
+                blockPos.z
+            );
         }
     });
 
     mEnabled = true;
-    logger.info("领地自定义生物生成拦截监听器已注册就绪");
+    logger.info("生成事件监听器已注册就绪（自然刷怪 / 刷怪笼 / 指令 / 刷怪蛋）");
     return true;
 }
 

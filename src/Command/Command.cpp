@@ -1,6 +1,7 @@
 #include "Command/Command.h"
 
 #include "Config/ConfigManager.h"
+#include "Interceptor/ActorAddHook.h"
 #include "Interceptor/MobMatcher.h"
 #include "Pland/PlandBridge.h"
 #include "logger.h"
@@ -78,6 +79,10 @@ void doList(CommandOutput& output) {
     output.success("一键拦截全部非原版生物: {}", cfg.block_all_non_vanilla_mobs ? "§a开启" : "§c关闭");
     output.success("拦截自然生成: {}", cfg.intercept_natural_spawn ? "§a开启" : "§c关闭");
     output.success("拦截非自然生成: {}", cfg.intercept_non_natural_spawn ? "§a开启" : "§c关闭");
+    output.success(
+        "脚本生成拦截(实体创建挂钩): {}",
+        ActorAddHook::getInstance().isEnabled() ? "§a已安装" : (cfg.hook_actor_add ? "§c配置已开但安装失败" : "§7已按配置关闭")
+    );
     output.success("拦截日志: {}", cfg.log_blocked_spawns ? "§a开启" : "§c关闭");
 
     auto& bridge = pland::PlandBridge::getInstance();

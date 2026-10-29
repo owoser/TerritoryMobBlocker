@@ -25,18 +25,29 @@ PLand 在实现「领地关闭怪物生成」时，两处判定都写死了原�
 ## 2. 工作原理
 
 ```
-BedrockSpawner::spawnMob
-        │
-        ├─► [LL] SpawningMobEvent  ──► 本插件：命中名单 + 领地禁怪 ⇒ cancel()  ← 主通道，零实体开销
-        │
-        └─► 实体创建
-                │
-                └─► [LL] SpawnedMobEvent ──► 本插件：命中名单 + 领地禁怪 ⇒ mob->despawn()  ← 兜底通道
+                        ┌─ 自然刷怪 / 刷怪笼 / /summon / 刷怪蛋
+BedrockSpawner::spawnMob┤
+                        └─► [通道 1] SpawningMobEvent ──► cancel()    ← 零实体、零延迟
+                            [通道 2] SpawnedMobEvent  ──► despawn()   ← 同路径兜底
+
+脚本 dimension.spawnEntity() ─► Level::addEntity ─► [通道 3] actor-add 挂钩
+                                                    └─► 下一 tick 清除
 ```
 
-1. **匹配**：先对生物 ID 做规范化（去 `<event>` 后缀、去空白、转小写），再与配置规则比对。**不命中的生物直接放行，不做任何领地查询**，因此热路径开销接近零。
-2. **查领地**：调用 `LandRegistry::getLandAt(BlockPos, dimId)` 获取坐标所在领地（子领地优先），并读取 `LandPermTable::environment.allowMonsterSpawn`。
-3. **判定**：仅当 `allowMonsterSpawn == false` 时拦截；荒野或允许生成的领地一律放行。
+LeviLamina 的生成事件**只挂在 `BedrockSpawner::spawnMob`** 上，它覆盖自然刷怪、刷怪笼、`/summon`、刷怪蛋；
+但脚本 API `dimension.spawnEntity()` 直接创建实体、绕过该函数 —— 这正是多数 Addon（驯龙高手等）生成生物的方式，
+也是「名单里有、却没拦住、连日志都没有」的根因。
+
+所以 v1.1.0 起新增第三通道：挂钩所有创建路径的公共汇合点 `Level::$addEntity`，先让引擎完成创建、拿到 `Actor*`，
+再按同一套判定处理，命中则下一 tick 安全清除（`addEntity` 尚未返回时立即销毁有重入风险）。
+
+三条通道共用同一份判定（`SpawnJudge`），保证行为一致：
+
+1. **匹配**：先做 ID 名单过滤，不命中直接放行，**不做任何领地查询**（绝大多数实体在此被淘汰）；
+2. **查领地**：`LandRegistry::getLandAt` 定位领地（子领地优先），读 `allowMonsterSpawn`；
+3. **判定**：仅当领地关闭怪物生成时拦截；荒野或允许生成的领地一律放行。
+
+> 本插件**只拦截「生成」**，不清扫领土里已经存在的生物。想清理存量请手动处理（或用 `/kill` 等原版手段）。
 
 ---
 
@@ -96,6 +107,12 @@ plugins/
     "block_all_non_vanilla_mobs": false,   // 一键拦截全部非 minecraft: 生物
     "intercept_natural_spawn": true,       // 拦自然生成
     "intercept_non_natural_spawn": true,   // 拦非自然生成
+
+    // 脚本生成路径（v3 新增）
+    "hook_actor_add": true,                // 挂钩实体创建，覆盖 dimension.spawnEntity()
+    "hook_skip_tamed": true,               // 跳过已驯服生物，避免清掉玩家的宠物
+    "hook_remove_delay_ticks": 1,          // 命中后延迟几 tick 清除
+
     "log_blocked_spawns": false,           // 逐条拦截日志（默认关闭，避免刷屏）
     "log_level": 3                         // 默认 3=Info
 }
@@ -328,8 +345,10 @@ git tag v1.1.0 && git push origin main --tags
 | PLand 未安装 / 被禁用 / 版本符号不匹配 | 插件正常加载，打印自检报告，**不拦截任何生物** |
 | `EnvironmentPerms` 布局不兼容 | 首次读权限时校验失败，打印错误并永久降级为不拦截 |
 | 领主本人 / PLand 管理员 | 无特权豁免 —— 领地禁怪是环境级设置，对所有人一致生效 |
-| 已存在的实体 | 本插件只拦「生成」动作，不清理领地内既往生成的生物（重启后由原版 despawn 规则处理） |
+| 已存在的实体 | 只在「生成瞬间」拦截，**不清扫存量**（这是有意设计：避免误删玩家已驯养的生物） |
 | 生物在领地外生成后走进领地 | 不拦截（只拦生成，不做追踪驱逐） |
+| 脚本生成路径 | 依赖 `Level::$addEntity` 挂钩；若该挂钩安装失败，会在启用日志里明确告警，此时只剩通道 1/2 |
+| 已驯服生物 | 默认跳过（`hook_skip_tamed: true`），想连宠物一起清就设为 false |
 
 ---
 

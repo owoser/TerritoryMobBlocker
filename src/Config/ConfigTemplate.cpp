@@ -101,6 +101,29 @@ std::string render(Config const& cfg) {
     "intercept_non_natural_spawn": )JSON"
         << boolText(cfg.intercept_non_natural_spawn) << R"JSON(,
 
+    // --------------------------------------------------------------------
+    // 脚本生成路径（v3 新增）
+    //
+    // 上面的两个生成事件只覆盖「刷怪管线」（自然刷怪 / 刷怪笼 / 指令 / 刷怪蛋）。
+    // 而脚本 API `dimension.spawnEntity()` 直接创建实体，完全不经过那条管线 ——
+    // 这也是很多 Addon 生物（驯龙高手等）明明在名单里却拦不住的原因。
+    // 下面这个开关会让插件挂钩底层「实体创建」，把这类生物一并纳入拦截。
+    // --------------------------------------------------------------------
+
+    // 是否挂钩底层实体创建以覆盖脚本生成的生物。关掉后只保留事件通道。
+    "hook_actor_add": )JSON"
+        << boolText(cfg.hook_actor_add) << R"JSON(,
+
+    // 挂钩通道命中时是否跳过已驯服的生物。
+    // 建议保持 true：否则玩家驯养的宠物/坐骑一旦位于禁怪领地内也会被清除。
+    "hook_skip_tamed": )JSON"
+        << boolText(cfg.hook_skip_tamed) << R"JSON(,
+
+    // 挂钩通道命中后延迟多少 tick 再清除。1 = 下一 tick。
+    // 之所以延迟：实体刚被创建时尚未完成注册，立即销毁有重入风险。
+    "hook_remove_delay_ticks": )JSON"
+        << cfg.hook_remove_delay_ticks << R"JSON(,
+
     // 是否在控制台打印每一条拦截记录。
     // 默认关闭：领地多、刷怪频繁时逐条打印会刷屏。排查问题时可临时改为 true。
     // 注意：该日志级别为 Info，还需要 log_level >= 3 才会真正输出。

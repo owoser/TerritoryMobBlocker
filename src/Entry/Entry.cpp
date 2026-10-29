@@ -2,6 +2,7 @@
 
 #include "Command/Command.h"
 #include "Config/ConfigManager.h"
+#include "Interceptor/ActorAddHook.h"
 #include "Interceptor/MobMatcher.h"
 #include "Interceptor/MobSpawnInterceptor.h"
 #include "Pland/PlandBridge.h"
@@ -90,12 +91,20 @@ bool Entry::enable() {
         return false;
     }
 
+    // 底层实体创建挂钩：补上脚本 dimension.spawnEntity() 这条绕过生成事件的路径
+    if (cfg.hook_actor_add) {
+        ActorAddHook::getInstance().enable();
+    } else {
+        log.info("已按配置跳过实体创建挂钩（脚本生成的生物不会被拦截）");
+    }
+
     log.info("TerritoryMobBlocker 已成功启用");
     return true;
 }
 
 bool Entry::disable() {
     getSelf().getLogger().info("正在禁用 TerritoryMobBlocker...");
+    ActorAddHook::getInstance().disable();
     MobSpawnInterceptor::getInstance().disable();
     return true;
 }
