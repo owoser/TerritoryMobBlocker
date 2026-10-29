@@ -1,12 +1,10 @@
 name: Release
 
 # 打 tag 即发布：推送 v1.2.3 会自动构建、打包并创建 / 更新对应 Release。
-# ⚠ 暂时只保留手动触发（workflow_dispatch），原因见文件末尾的「已知阻塞」说明。
-# 阻塞解除后，把下面注释掉的触发条件恢复即可：
-#   push:
-#     tags:
-#       - "v*"
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 concurrency:
@@ -16,10 +14,9 @@ concurrency:
 jobs:
   build:
     name: Build (windows-x64)
-    # windows-2022 = VS 2022 / MSVC 14.44。
-    # windows-latest 现在是 VS 2026（MSVC 14.51），其 STL 对不完整类型的 unique_ptr
-    # 检查更严格，会直接让 LeviLamina 26.51.6 的 MinecraftCommands 析构报错：
-    #   error: invalid application of 'sizeof' to an incomplete type 'CommandRegistry'
+    # windows-2022 = VS 2022 / MSVC 14.44，与本地验证通过的工具链一致。
+    # LeviLamina SDK 不走源码构建（上游 26.51.x 在现代 MSVC STL 下编译不过），
+    # 改由本仓库 Release 分发预编译 SDK，见 xmake-repo-extra/packages/l/levilamina/xmake.lua。
     runs-on: windows-2022
 
     steps:
@@ -29,11 +26,8 @@ jobs:
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
 
-      # 工具链必须成对匹配：
-      #   - MSVC 14.44（VS 2022）的 STL 要求 Clang >= 19；
-      #   - clang 19 又是唯一能编过 LeviLamina 26.51.6 的版本（clang 22 会让
-      #     MinecraftCommands 的 unique_ptr<CommandRegistry> 触发 incomplete type 断言）。
-      # 本地验证通过的组合正是 MSVC 14.44 + clang 19.1.5。
+      # 与本地验证通过的组合保持一致：MSVC 14.44（VS 2022）+ clang 19.1.5。
+      # MSVC 14.44 的 STL 要求 Clang >= 19。
       - name: Install LLVM 19 (clang-cl)
         run: choco install llvm --version=19.1.5 -y --no-progress --allow-downgrade
 
@@ -47,9 +41,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/AppData/Local/.xmake
-          key: xmake-v2-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
+          key: xmake-v3-${{ runner.os }}-${{ hashFiles('xmake.lua', 'xmake-repo-extra/**/xmake.lua') }}
           restore-keys: |
-            xmake-v2-${{ runner.os }}-
+            xmake-v3-${{ runner.os }}-
 
       - name: Update xmake repositories
         run: xmake repo -u
@@ -147,32 +141,3 @@ jobs:
           # v1.1.0-beta.1 这类带连字符的 tag 自动标记为预发布
           prerelease: ${{ contains(github.ref_name, '-') }}
           draft: false
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 已知阻塞（截至 2026-10-29）
-#
-# CI 卡在 `xmake f` 的第一步：构建依赖 levilamina 26.51.6 的 SDK 时失败。
-# 这不是本项目的问题，而是上游源码在现代 MSVC STL 下无法编译：
-#
-#   src/mc/server/commands/MinecraftCommands.h 用
-#     ::ll::TypedStorage<8, 8, ::std::unique_ptr<T>>
-#   保存了 T 只做前向声明的成员（CommandRegistry / CommandOutputSender /
-#   Command / DeferredCommandBase），同时又有 `virtual ~MinecraftCommands() = default;`。
-#   一旦某个 TU 实例化该析构函数（例如 ExecuteCommandEvent.cpp 里的
-#   LL_TYPE_INSTANCE_HOOK），MSVC STL 的 default_delete 就会断言：
-#
-#     error: invalid application of 'sizeof' to an incomplete type '...'
-#
-# 复现条件与编译器版本无关：clang 19 / clang 22、MSVC 14.44 / 14.51 均可复现，
-# 本地把 SDK 删掉重建同样失败（说明现有可用 SDK 是历史产物）。
-#
-# 可行的解法（择一，需要时再实施）：
-#   1. 等上游修复 MinecraftCommands.h 的 include，然后用官方 levimc-repo 正常构建；
-#   2. 在 CI 里用「本地补丁包」（add_repositories 指向自建 repo，构建前补 include）——
-#      已验证可让 CommandRegistry / CommandOutputSender 通过，但会逐个暴露下一个
-#      同样写法的类，属于打地鼠，不推荐；
-#   3. 把一份已构建好的 SDK（include + lib，约 50 MB / 压缩后约 10 MB）作为本仓库
-#      Release 资产分发，CI 下载后跳过源码构建（需要同时接管 linkrule 的 prelink 步骤）。
-#
-# 在阻塞解除前，本工作流保持为手动触发，避免 main 分支长期红灯。
-# ─────────────────────────────────────────────────────────────────────────────

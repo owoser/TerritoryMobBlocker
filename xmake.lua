@@ -4,6 +4,13 @@ if is_plat("windows") then
     set_toolchains("clang-cl")
 end
 
+-- 本地补丁仓库：提供 levilamina 的「预编译 SDK」包定义，替代从源码构建。
+--
+-- 上游 LeviLamina 26.51.x 目前无法从源码编译（MinecraftCommands.h 对 unique_ptr 的
+-- 前向声明 + 默认析构会触发 MSVC STL 的 incomplete type 断言，与编译器版本无关），
+-- 详见 xmake-repo-extra/packages/l/levilamina/xmake.lua 的说明。
+-- 必须放在 levimc-repo 之前：同名包以先注册者为准。
+add_repositories("tmb-extra xmake-repo-extra")
 add_repositories("levimc-repo https://github.com/LiteLDev/xmake-repo.git")
 
 -- 说明：LeviLamina SDK 版本线需与服务器实际部署的 LL3 保持同一 26.51.x 小版本线。
