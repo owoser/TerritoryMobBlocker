@@ -230,6 +230,7 @@ TerritoryMobBlocker/
 ├── xmake.lua                     # 构建配置（levilamina 26.51.6 + levibuildscript，无 pland 依赖）
 ├── manifest.json                 # 模组清单（强依赖 PLand）
 ├── tooth.json                    # lip 包元数据
+├── xmake-repo-extra/             # 本地 xmake 仓库：levilamina 预编译 SDK 包定义
 ├── src/
 │   ├── Entry/                    # Mod 生命周期 + MemoryOperators
 │   ├── Config/
@@ -260,7 +261,21 @@ xmake
 
 产物：`bin/TerritoryMobBlocker/{TerritoryMobBlocker.dll, TerritoryMobBlocker.pdb, manifest.json}`
 
-> **版本锁定说明**：`levilamina` 锁定 `26.51.6`。`26.51.9` 的 SDK 包在当前工具链下自身编译失败（`MinecraftCommands` 前置声明不完整导致 `unique_ptr<CommandRegistry>` 析构报错），因此不使用浮动版本 `26.51.*`。
+> **SDK 分发说明（重要）**：上游 LeviLamina **26.51.x 目前无法从源码编译**——
+> `mc/server/commands/MinecraftCommands.h` 用 `unique_ptr<T>` 保存了仅前向声明的 `T`
+> （`CommandRegistry` / `CommandOutputSender` / `Command` / `DeferredCommandBase`），
+> 同时又声明 `virtual ~MinecraftCommands() = default;`，任何实例化该析构函数的翻译单元
+> 都会触发 MSVC STL 的断言 `error: invalid application of 'sizeof' to an incomplete type`。
+> 这与编译器版本无关（clang 19/22、MSVC 14.44/14.51 均可复现）。
+>
+> 因此本项目改为**分发预编译 SDK**：`xmake-repo-extra/packages/l/levilamina/xmake.lua`
+> 与官方包同名同结构，只把 `on_install` 换成下载
+> [`sdk-v26.51.6`](https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.6)
+> 的 `levilamina-sdk-26.51.6-server.zip`（`include/` + `lib/`，不含运行期 DLL）。
+> 依赖列表、define、linkdirs 与官方一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
+>
+> 上游修好后：删掉 `xmake-repo-extra/` 目录，并移除 `xmake.lua` 里的
+> `add_repositories("tmb-extra xmake-repo-extra")` 这一行，即回到官方源码构建。
 
 ### CI / 自动发布
 
@@ -269,12 +284,17 @@ xmake
 | [`build.yml`](.github/workflows/build.yml) | push 到 `main` / PR / 手动 | 配置 + 构建，上传 `TerritoryMobBlocker-windows-x64` artifact 作为构建验证 |
 | [`release.yml`](.github/workflows/release.yml) | 推送 `v*` tag / 手动 | 构建 → 打包 `TerritoryMobBlocker-<ver>.zip` → 创建或更新 Release，正文自动从 `CHANGELOG.md` 对应版本段落提取 |
 
-发版流程因此只剩两步：
+CI 固定 `windows-2022` + `clang-cl 19.1.5`（本地验证通过的组合），并缓存 `~/.xmake`，
+首次构建约 5 分钟、命中缓存后更快。
+
+发版流程只剩三步：
 
 ```bash
 # 1. 在 CHANGELOG.md 顶部加一节 "## 1.1.0"
+# 2. 提交
 git add -A && git commit -m "chore: release 1.1.0"
-git tag v1.1.0 && git push origin main --tags      # 2. 推送 tag，CI 自动出包
+# 3. 打 tag 并推送，CI 自动构建 + 出包 + 建 Release
+git tag v1.1.0 && git push origin main --tags
 ```
 
 版本号由 tag 派生（`v1.1.0` → `1.1.0`），通过环境变量 `TMB_VERSION` 注入 `xmake.lua` 写入 `manifest.json`，**不需要手工改版本号**；本地构建未设置该变量时回退为 `1.0.0`。带连字符的 tag（如 `v1.1.0-beta.1`）会自动标记为预发布。

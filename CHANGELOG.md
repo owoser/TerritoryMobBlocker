@@ -1,5 +1,27 @@
 # 更新日志
 
+## 1.0.1
+
+构建基建更新，插件运行期行为与 1.0.0 完全一致。
+
+### 工程
+
+- **GitHub Actions 自动构建与发版**
+  - `build.yml`：push 到 `main` / PR / 手动触发，构建并上传 artifact；
+  - `release.yml`：推送 `v*` tag 自动构建 → 打包 `TerritoryMobBlocker-<ver>.zip` →
+    创建或更新 Release，正文从本文件对应版本段落提取，带连字符的 tag 自动标记预发布；
+  - 版本号由 tag 派生（`TMB_VERSION` 注入 `xmake.lua`），打 tag 即版本号的唯一来源，
+    本地构建未设置时回退 `1.0.0`。
+- **改用预编译 SDK 分发，绕过上游构建故障**
+  上游 LeviLamina 26.51.x 目前无法从源码编译：`mc/server/commands/MinecraftCommands.h`
+  用 `unique_ptr<T>` 保存了仅前向声明的 `T`，同时声明 `virtual ~MinecraftCommands() = default;`，
+  任何实例化该析构函数的翻译单元都会触发 MSVC STL 的断言
+  `invalid application of 'sizeof' to an incomplete type`（clang 19/22、MSVC 14.44/14.51 均可复现）。
+  因此新增 `xmake-repo-extra/packages/l/levilamina/xmake.lua`：与官方包同名同结构，只把
+  `on_install` 换成下载预编译 SDK（`sdk-v26.51.6` Release 资产），依赖、define、linkdirs
+  保持一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
+  上游修好后删掉该目录并移除 `add_repositories` 即可回到官方构建。
+
 ## 1.0.0
 
 首个可用版本。
