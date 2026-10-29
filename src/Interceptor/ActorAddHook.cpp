@@ -1,6 +1,7 @@
 #include "Interceptor/ActorAddHook.h"
 
 #include "Config/ConfigManager.h"
+#include "Interceptor/MobMatcher.h"
 #include "Interceptor/SpawnJudge.h"
 #include "logger.h"
 
@@ -141,19 +142,37 @@ void ActorAddHook::onActorCreated(void* actorPtr) {
         return;
     }
 
-    // 已驯服生物默认跳过，避免清掉玩家的宠物
-    if (cfg.hook_skip_tamed && actor->isTame()) {
+    auto const& typeName = actor->getTypeName();
+    auto const  pos       = toBlockPos(actor->getPosition());
+    int const   dimId     = actor->getDimensionId();
+    bool const  inList    = MobMatcher::getInstance().isBlocked(typeName);
+    bool const  tamed     = actor->isTame();
+
+    // Debug 级：记录每一次实体创建，附带坐标与驯服状态，便于确认挂钩是否生效、
+    // 以及"名单内的生物为何没被拦"（驯服跳过 / 不在领地 / 判定放行）。
+    if (cfg.log_level >= 4) {
+        logger.debug(
+            "[ActorAdd] 实体创建: {} @({}, {}, {}) dim={}{}{}",
+            typeName,
+            pos.x,
+            pos.y,
+            pos.z,
+            dimId,
+            inList ? " [名单内]" : "",
+            tamed ? " [已驯服]" : ""
+        );
+    }
+
+    // 已驯服生物默认跳过，避免清掉玩家的宠物 —— 但要在日志里说清楚，
+    // 否则会表现为"名单里明明有，却没拦住也没有判定日志"
+    if (cfg.hook_skip_tamed && tamed) {
+        if (inList && cfg.log_level >= 4) {
+            logger.debug("[ActorAdd] 跳过 {}：已驯服（hook_skip_tamed=true）", typeName);
+        }
         return;
     }
 
-    auto const& typeName = actor->getTypeName();
-
-    // Debug 级：记录每一次实体创建，便于确认挂钩是否生效
-    if (cfg.log_level >= 4) {
-        logger.debug("[ActorAdd] 实体创建: {}", typeName);
-    }
-
-    auto verdict = judgeSpawn(typeName, toBlockPos(actor->getPosition()), actor->getDimensionId());
+    auto verdict = judgeSpawn(typeName, pos, dimId);
     if (!verdict.block) {
         return;
     }
@@ -169,8 +188,8 @@ void ActorAddHook::onActorCreated(void* actorPtr) {
     item.mobId     = verdict.mobId;
     item.landName  = verdict.landName;
     item.landId    = verdict.landId;
-    item.pos       = toBlockPos(actor->getPosition());
-    item.dimId     = actor->getDimensionId();
+    item.pos       = pos;
+    item.dimId     = dimId;
 
     mImpl->pending.push_back(std::move(item));
 }

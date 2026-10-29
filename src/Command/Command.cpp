@@ -3,6 +3,7 @@
 #include "Config/ConfigManager.h"
 #include "Interceptor/ActorAddHook.h"
 #include "Interceptor/MobMatcher.h"
+#include "Interceptor/SpawnJudge.h"
 #include "Pland/PlandBridge.h"
 #include "logger.h"
 
@@ -13,7 +14,9 @@
 #include "mc/server/commands/CommandOutput.h"
 #include "mc/server/commands/CommandPermissionLevel.h"
 #include "mc/world/actor/Actor.h"
+#include "ll/api/service/Bedrock.h"
 #include "mc/world/level/BlockPos.h"
+#include "mc/world/level/Level.h"
 
 #include <cmath>
 
@@ -27,6 +30,12 @@ namespace tmb {
  */
 struct TestParam {
     std::string mobId;
+};
+
+/// /tmb sweep [radius] [skip_tamed]
+struct SweepParam {
+    int  radius{32};
+    bool skip_tamed{true};
 };
 
 namespace {
@@ -186,6 +195,102 @@ void doTest(CommandOrigin const& origin, CommandOutput& output, TestParam const&
     }
 }
 
+/**
+ * 手动清理存量（只在你主动执行时生效，默认行为始终是"只拦生成"）
+ *
+ * 扫描半径内的实体，把「命中名单 + 所在领地禁止怪物生成」的实体清除。
+ * 这是给"之前已经刷出来的生物"用的兜底手段，不会自动运行。
+ */
+void doSweep(CommandOrigin const& origin, CommandOutput& output, SweepParam const& param) {
+    auto entity = origin.getEntity();
+    if (!entity) {
+        output.error("§c该指令需要由玩家执行（需要中心坐标）。");
+        return;
+    }
+
+    auto* level = ll::service::getLevel().as_ptr();
+    if (!level) {
+        output.error("§c无法获取世界实例。");
+        return;
+    }
+
+    int radius = param.radius;
+    if (radius <= 0) {
+        radius = 32;
+    }
+    if (radius > 256) {
+        radius = 256;
+    }
+
+    auto const& center = entity->getPosition();
+    int const   dimId  = entity->getDimensionId();
+    double      r2     = static_cast<double>(radius) * radius;
+
+    int scanned = 0;
+    int matched = 0;
+    int removed = 0;
+    int skippedTamed = 0;
+
+    auto actors = level->getRuntimeActorList();
+    for (auto* actor : actors) {
+        if (!actor || actor->isPlayer()) {
+            continue;
+        }
+        if (actor->getDimensionId() != dimId) {
+            continue;
+        }
+
+        auto const& pos = actor->getPosition();
+        double      dx  = pos.x - center.x;
+        double      dy  = pos.y - center.y;
+        double      dz  = pos.z - center.z;
+        if (dx * dx + dy * dy + dz * dz > r2) {
+            continue;
+        }
+
+        ++scanned;
+
+        auto const& typeName = actor->getTypeName();
+        if (!MobMatcher::getInstance().isBlocked(typeName)) {
+            continue;
+        }
+        ++matched;
+
+        if (param.skip_tamed && actor->isTame()) {
+            ++skippedTamed;
+            continue;
+        }
+
+        auto verdict = judgeSpawn(typeName, toBlockPos(pos), dimId);
+        if (!verdict.block) {
+            continue;
+        }
+
+        actor->despawn();
+        ++removed;
+        logger.info(
+            "手动清理：领地「{}」(#{} 维度{}) 内的 {} @({}, {}, {})",
+            verdict.landName,
+            verdict.landId,
+            dimId,
+            verdict.mobId,
+            static_cast<int>(std::floor(pos.x)),
+            static_cast<int>(std::floor(pos.y)),
+            static_cast<int>(std::floor(pos.z))
+        );
+    }
+
+    output.success("§e===== 手动清理结果（半径 {} 格）=====", radius);
+    output.success("扫描实体: {}", scanned);
+    output.success("命中名单: {}", matched);
+    output.success(
+        "已清除: {}  跳过已驯服: {}",
+        removed,
+        skippedTamed
+    );
+    output.success("§7(注：本插件默认只拦生成，不清扫存量；本次为你手动触发)");
+}
+
 } // namespace
 
 void registerCommand() {
@@ -224,6 +329,16 @@ void registerCommand() {
         if (!requireOperator(origin, output)) return;
         doProbe(output);
     });
+
+    // /tmb sweep [radius] [skip_tamed] —— 手动清理存量
+    cmd.overload<SweepParam>()
+        .text("sweep")
+        .optional("radius")
+        .optional("skip_tamed")
+        .execute([](CommandOrigin const& origin, CommandOutput& output, SweepParam const& param) {
+            if (!requireOperator(origin, output)) return;
+            doSweep(origin, output, param);
+        });
 
     // /tmb test <mobId>
     cmd.overload<TestParam>()
