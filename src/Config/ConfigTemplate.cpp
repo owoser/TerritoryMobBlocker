@@ -124,6 +124,31 @@ std::string render(Config const& cfg) {
     "hook_remove_delay_ticks": )JSON"
         << cfg.hook_remove_delay_ticks << R"JSON(,
 
+    // --------------------------------------------------------------------
+    // 新实体监视器（v4 新增）—— 兜底通道，与生成路径无关
+    //
+    // 引擎创建实体的入口不止一个（Level::$addEntity / $putEntity 的两个重载 /
+    // $addGlobalEntity / $addAutonomousEntity），某些脚本 API 走的是别的入口，
+    // 表现为"生成成功但插件一条日志都没有"。监视器改为「只认新出现的实体」：
+    // 首次扫描登记全部存量为基线，此后从未见过的实体一律按同一套判定处理。
+    // --------------------------------------------------------------------
+
+    // 是否启用新实体监视器
+    "watch_new_entities": )JSON"
+        << boolText(cfg.watch_new_entities) << R"JSON(,
+
+    // 扫描间隔（tick）。4 ≈ 0.2 秒：越小越及时，越大越省性能。
+    "watch_interval_ticks": )JSON"
+        << cfg.watch_interval_ticks << R"JSON(,
+
+    // 监视器是否跳过已驯服生物（建议 true，避免清掉玩家的宠物）
+    "watch_skip_tamed": )JSON"
+        << boolText(cfg.watch_skip_tamed) << R"JSON(,
+
+    // Debug 日志是否记录"所有"新实体。默认只记录名单内的，避免刷屏。
+    "watch_log_all_new_entities": )JSON"
+        << boolText(cfg.watch_log_all_new_entities) << R"JSON(,
+
     // 是否在控制台打印每一条拦截记录。
     // 默认关闭：领地多、刷怪频繁时逐条打印会刷屏。排查问题时可临时改为 true。
     // 注意：该日志级别为 Info，还需要 log_level >= 3 才会真正输出。

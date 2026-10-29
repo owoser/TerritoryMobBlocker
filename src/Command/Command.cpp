@@ -2,6 +2,7 @@
 
 #include "Config/ConfigManager.h"
 #include "Interceptor/ActorAddHook.h"
+#include "Interceptor/NewEntityWatcher.h"
 #include "Interceptor/MobMatcher.h"
 #include "Interceptor/SpawnJudge.h"
 #include "Pland/PlandBridge.h"
@@ -89,8 +90,12 @@ void doList(CommandOutput& output) {
     output.success("拦截自然生成: {}", cfg.intercept_natural_spawn ? "§a开启" : "§c关闭");
     output.success("拦截非自然生成: {}", cfg.intercept_non_natural_spawn ? "§a开启" : "§c关闭");
     output.success(
-        "脚本生成拦截(实体创建挂钩): {}",
+        "生成路径挂钩(Level::$addEntity): {}",
         ActorAddHook::getInstance().isEnabled() ? "§a已安装" : (cfg.hook_actor_add ? "§c配置已开但安装失败" : "§7已按配置关闭")
+    );
+    output.success(
+        "新实体监视器(兜底, 与路径无关): {}",
+        NewEntityWatcher::getInstance().isEnabled() ? "§a运行中" : (cfg.watch_new_entities ? "§c配置已开但未启动" : "§7已按配置关闭")
     );
     output.success("拦截日志: {}", cfg.log_blocked_spawns ? "§a开启" : "§c关闭");
 

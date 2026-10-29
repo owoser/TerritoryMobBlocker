@@ -30,9 +30,13 @@ BedrockSpawner::spawnMob┤
                         └─► [通道 1] SpawningMobEvent ──► cancel()    ← 零实体、零延迟
                             [通道 2] SpawnedMobEvent  ──► despawn()   ← 同路径兜底
 
-脚本 dimension.spawnEntity() ─► Level::addEntity ─► [通道 3] actor-add 挂钩
-                                                    └─► 下一 tick 清除
+脚本 dimension.spawnEntity() ─► ???（入口不止一个）─► [通道 3] 新实体监视器
+                                                    └─► 最多 0.2 秒后清除
 ```
+
+> 通道 3 之所以从"挂钩 `Level::$addEntity`"演进成"新实体监视器"：引擎创建实体的入口不止一个
+> （`$addEntity` / `$putEntity` ×2 / `$addGlobalEntity` / `$addAutonomousEntity`），某些脚本 API
+> 走的是别的入口，表现为「生成成功但插件毫无日志」。监视器只认"新出现的实体"，与路径无关。
 
 LeviLamina 的生成事件**只挂在 `BedrockSpawner::spawnMob`** 上，它覆盖自然刷怪、刷怪笼、`/summon`、刷怪蛋；
 但脚本 API `dimension.spawnEntity()` 直接创建实体、绕过该函数 —— 这正是多数 Addon（驯龙高手等）生成生物的方式，
@@ -109,10 +113,16 @@ plugins/
     "intercept_natural_spawn": true,       // 拦自然生成
     "intercept_non_natural_spawn": true,   // 拦非自然生成
 
-    // 脚本生成路径（v3 新增）
-    "hook_actor_add": true,                // 挂钩实体创建，覆盖 dimension.spawnEntity()
+    // 脚本生成路径：挂钩 Level::$addEntity（v3 新增）
+    "hook_actor_add": true,                // 挂钩实体创建
     "hook_skip_tamed": true,               // 跳过已驯服生物，避免清掉玩家的宠物
     "hook_remove_delay_ticks": 1,          // 命中后延迟几 tick 清除
+
+    // 新实体监视器：兜底通道，与生成路径无关（v4 新增，推荐开启）
+    "watch_new_entities": true,            // 只处理"新出现"的实体，启动时的存量全部豁免
+    "watch_interval_ticks": 4,             // 扫描间隔（tick），4 ≈ 0.2 秒
+    "watch_skip_tamed": true,              // 跳过已驯服生物
+    "watch_log_all_new_entities": false,   // Debug 日志是否记录所有新实体
 
     "log_blocked_spawns": false,           // 逐条拦截日志（默认关闭，避免刷屏）
     "log_level": 3                         // 默认 3=Info

@@ -8,7 +8,7 @@
 namespace tmb {
 
 /// 当前配置文件结构版本号。修改 Config 字段或默认值时递增，并在 ConfigManager 中补迁移步骤。
-inline constexpr int kCurrentConfigVersion = 3;
+inline constexpr int kCurrentConfigVersion = 4;
 
 struct Config {
     /// 配置文件结构版本号（插件升级时会自动迁移并写回）
@@ -58,6 +58,27 @@ struct Config {
     /// 挂钩通道命中后延迟多少 tick 清除（1 = 下一 tick）
     int hook_remove_delay_ticks = 1;
 
+    /**
+     * 新实体监视器：兜底通道，覆盖所有实体创建路径。
+     *
+     * 引擎里创建实体的入口不止 `Level::$addEntity` 一个（还有 `$putEntity` 的两个重载、
+     * `$addGlobalEntity`、`$addAutonomousEntity` 等），逐个挂钩无法保证覆盖所有脚本 API。
+     * 开启本项后改为"只认新出现的实体"：首次扫描登记全部存量为基线，此后凡是从未见过的
+     * 实体都按同一套判定处理，因此与具体生成路径无关。
+     *
+     * 代价是最多 `watch_interval_ticks` tick 的清理延迟。
+     */
+    bool watch_new_entities = true;
+
+    /// 监视器扫描间隔（tick）。默认 4（约 0.2 秒）。
+    int watch_interval_ticks = 4;
+
+    /// 监视器是否跳过已驯服生物（避免清掉玩家的宠物）
+    bool watch_skip_tamed = true;
+
+    /// Debug 日志是否记录所有新实体（默认只记录名单内的，避免刷屏）
+    bool watch_log_all_new_entities = false;
+
     /// 是否在控制台输出拦截日志（默认关闭，避免刷屏）
     bool log_blocked_spawns = false;
 
@@ -77,6 +98,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     hook_actor_add,
     hook_skip_tamed,
     hook_remove_delay_ticks,
+    watch_new_entities,
+    watch_interval_ticks,
+    watch_skip_tamed,
+    watch_log_all_new_entities,
     log_blocked_spawns,
     log_level
 )

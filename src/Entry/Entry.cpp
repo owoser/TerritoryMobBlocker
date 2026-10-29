@@ -3,6 +3,7 @@
 #include "Command/Command.h"
 #include "Config/ConfigManager.h"
 #include "Interceptor/ActorAddHook.h"
+#include "Interceptor/NewEntityWatcher.h"
 #include "Interceptor/MobMatcher.h"
 #include "Interceptor/MobSpawnInterceptor.h"
 #include "Pland/PlandBridge.h"
@@ -91,11 +92,18 @@ bool Entry::enable() {
         return false;
     }
 
-    // 底层实体创建挂钩：补上脚本 dimension.spawnEntity() 这条绕过生成事件的路径
+    // 底层实体创建挂钩：覆盖经过 Level::$addEntity 的路径（即时生效）
     if (cfg.hook_actor_add) {
         ActorAddHook::getInstance().enable();
     } else {
-        log.info("已按配置跳过实体创建挂钩（脚本生成的生物不会被拦截）");
+        log.info("已按配置跳过实体创建挂钩");
+    }
+
+    // 新实体监视器：与创建路径无关的兜底通道（最多 watch_interval_ticks tick 延迟）
+    if (cfg.watch_new_entities) {
+        NewEntityWatcher::getInstance().enable();
+    } else {
+        log.info("已按配置跳过新实体监视器（未覆盖的生成路径将不会被拦截）");
     }
 
     log.info("TerritoryMobBlocker 已成功启用");
@@ -104,6 +112,7 @@ bool Entry::enable() {
 
 bool Entry::disable() {
     getSelf().getLogger().info("正在禁用 TerritoryMobBlocker...");
+    NewEntityWatcher::getInstance().disable();
     ActorAddHook::getInstance().disable();
     MobSpawnInterceptor::getInstance().disable();
     return true;
