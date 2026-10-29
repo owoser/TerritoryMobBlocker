@@ -23,8 +23,8 @@ jobs:
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
 
-      - name: Install LLVM (clang-cl)
-        run: choco install llvm -y --no-progress
+      - name: Install LLVM 19 (clang-cl)
+        run: choco install llvm --version=19.1.5 -y --no-progress --allow-downgrade
 
       - name: Show toolchain
         shell: pwsh
@@ -36,9 +36,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/AppData/Local/.xmake
-          key: xmake-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
+          key: xmake-v2-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
           restore-keys: |
-            xmake-${{ runner.os }}-
+            xmake-v2-${{ runner.os }}-
 
       - name: Update xmake repositories
         run: xmake repo -u
@@ -52,6 +52,18 @@ jobs:
         run: xmake -y
         env:
           TMB_VERSION: ${{ github.ref_name }}
+
+      - name: Dump install logs (on failure)
+        if: failure()
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA '.xmake\cache\packages'
+          if (Test-Path $root) {
+            Get-ChildItem $root -Recurse -Filter install.txt -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host "===== $($_.FullName) ====="
+              Get-Content $_.FullName -Tail 300
+            }
+          }
 
       # bin/ 里同时有 .pdb，发布包只需要 dll + manifest.json
       - name: Package (TerritoryMobBlocker/{dll,manifest.json})
