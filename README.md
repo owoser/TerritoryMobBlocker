@@ -3,7 +3,7 @@
 [![Build](https://github.com/owoser/TerritoryMobBlocker/actions/workflows/build.yml/badge.svg)](https://github.com/owoser/TerritoryMobBlocker/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/owoser/TerritoryMobBlocker)](https://github.com/owoser/TerritoryMobBlocker/releases)
 
-> 基于 **LeviLamina 26.51.\*** 的原生插件，用于补全 **PLand** 领地系统中「环境权限 → 怪物生成」对 **Addons 自定义生物** 的拦截盲区。
+> 基于 **LeviLamina 26.60.\*** 的原生插件，用于补全 **PLand** 领地系统中「环境权限 → 怪物生成」对 **Addons 自定义生物** 的拦截盲区。
 
 ---
 
@@ -42,8 +42,9 @@ LeviLamina 的生成事件**只挂在 `BedrockSpawner::spawnMob`** 上，它覆�
 但脚本 API `dimension.spawnEntity()` 直接创建实体、绕过该函数 —— 这正是多数 Addon（驯龙高手等）生成生物的方式，
 也是「名单里有、却没拦住、连日志都没有」的根因。
 
-所以 v1.1.0 起新增第三通道：挂钩所有创建路径的公共汇合点 `Level::$addEntity`，先让引擎完成创建、拿到 `Actor*`，
-再按同一套判定处理，命中则下一 tick 安全清除（`addEntity` 尚未返回时立即销毁有重入风险）。
+v1.1.0 补过第三通道：挂钩 `Level::$addEntity`，先让引擎完成创建、拿到 `Actor*`，再按同一套判定处理，
+命中则下一 tick 安全清除（`addEntity` 尚未返回时立即销毁有重入风险）。但实测仍会漏 —— 引擎创建实体的入口不止这一个，
+于是 v1.2.0 再加一层与路径无关的**新实体监视器**兜底（见上图通道 3）；两者可同时开启，也可各自关闭。
 
 三条通道共用同一份判定（`SpawnJudge`），保证行为一致：
 
@@ -58,11 +59,11 @@ LeviLamina 的生成事件**只挂在 `BedrockSpawner::spawnMob`** 上，它覆�
 
 ## 3. 安装
 
-1. 服务器需为 **LeviLamina 26.51.x**，并已安装 **PLand ≥ 0.22**（manifest 中已声明为强依赖，LL 会保证加载顺序）。
-2. 将 `bin/TerritoryMobBlocker/` 整个目录拷到服务器的 `plugins/` 下：
+1. 服务器需为 **LeviLamina 26.60.x**，并已安装 **PLand ≥ 0.26**（manifest 中已声明为强依赖，LL 会保证加载顺序）。
+2. 将 `bin/TerritoryMobBlocker/` 整个目录拷到服务器的 `mods/` 下（26.60 起服务端 Mod 目录已从 `plugins/` 改名）：
 
 ```
-plugins/
+mods/
 └── TerritoryMobBlocker/
     ├── TerritoryMobBlocker.dll
     ├── manifest.json
@@ -75,7 +76,7 @@ plugins/
 ```
 [TerritoryMobBlocker] 正在加载 TerritoryMobBlocker（PLand 领地自定义生物生成拦截）...
 [TerritoryMobBlocker] 配置加载完成：拦截名单 2 条，豁免名单 0 条
-[TerritoryMobBlocker] PLand 接口自检通过（v0.25.0），拦截规则已生效
+[TerritoryMobBlocker] PLand 接口自检通过（v0.26.0），拦截规则已生效
 [TerritoryMobBlocker] 领地自定义生物生成拦截监听器已注册就绪
 [TerritoryMobBlocker] TerritoryMobBlocker 已成功启用
 ```
@@ -86,7 +87,7 @@ plugins/
 
 ## 4. 配置
 
-路径：`plugins/TerritoryMobBlocker/config/config.jsonc`
+路径：`mods/TerritoryMobBlocker/config/config.jsonc`
 
 **格式为 JSONC**（JSON with Comments）——允许 `//` 行注释与 `/* */` 块注释，也容忍末尾多余的逗号。
 
@@ -185,6 +186,8 @@ plugins/
 | --- | --- |
 | v1 | 初版（`log_blocked_spawns` 默认 `true`） |
 | v2 | 逐条拦截日志默认改为 `false`；`log_level` 默认回到 `3`（Info） |
+| v3 | 新增实体创建挂钩配置：`hook_actor_add` / `hook_skip_tamed` / `hook_remove_delay_ticks` |
+| v4 | 新增新实体监视器配置：`watch_new_entities` / `watch_interval_ticks` / `watch_skip_tamed` / `watch_log_all_new_entities` |
 
 升级 v1 → v2 时，若你的 `log_blocked_spawns` 仍是 `true`，会被自动改为 `false`，并在控制台打印：
 
@@ -256,7 +259,7 @@ LeviLamina 的启动顺序是**先把所有 Mod 全部 `load()`，再按依赖�
 
 ```
 TerritoryMobBlocker/
-├── xmake.lua                     # 构建配置（levilamina 26.51.9 + levibuildscript，无 pland 依赖）
+├── xmake.lua                     # 构建配置（levilamina 26.60.2 + levibuildscript，无 pland 依赖）
 ├── manifest.json                 # 模组清单（强依赖 PLand）
 ├── tooth.json                    # lip 包元数据
 ├── xmake-repo-extra/             # 本地 xmake 仓库：levilamina 预编译 SDK 包定义
@@ -294,36 +297,36 @@ xmake
 > `xmake f -c -y -p windows -a x64 -m release`。`xmake.lua` 里有一道护栏，
 > 若 PATH 里先命中的 clang-cl < 23 会直接报错提示，而不是等到编译上游头文件才失败。
 
-> **工具链要求（重要）**：LeviLamina 26.51.x 需要 **clang-cl 23**。
+> **工具链要求（重要）**：LeviLamina 26.51+ 需要 **clang-cl 23**。
 > `mc/server/commands/MinecraftCommands.h` 用 `unique_ptr<T>` 保存了仅前向声明的 `T`
 > （`CommandRegistry` / `CommandOutputSender` / `Command` / `DeferredCommandBase`），
 > 同时又声明 `virtual ~MinecraftCommands() = default;`，clang 19 实例化该析构函数时会触发
 > MSVC STL 的断言 `error: invalid application of 'sizeof' to an incomplete type`；
-> 升级到 **clang-cl 23.1.4** 后该错误消失（本机实测 26.51.9 可从源码构建通过）。
+> 升级到 **clang-cl 23.1.4** 后该错误消失（本机实测 26.51.9 / 26.60.2 均可从源码构建通过）。
 > VS 2022 自带的 Clang 组件是 19.1.5，**不够**，需要单独安装 LLVM 23
 > （[LLVM-23.1.4-win64.msi](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.4)），
 > 并让 `clang-cl` 在 PATH 中先于 `VC\Tools\Llvm\x64\bin` 被找到。
 
 > **SDK 分发说明**：本项目仍**分发预编译 SDK**——`xmake-repo-extra/packages/l/levilamina/xmake.lua`
 > 与官方包同名同结构，只把 `on_install` 换成下载
-> [`sdk-v26.51.9`](https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.9)
-> 的 `levilamina-sdk-26.51.9-server.zip`（`include/` + `lib/`，不含运行期 DLL）。
+> [`sdk-v26.60.2`](https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.60.2)
+> 的 `levilamina-sdk-26.60.2-server.zip`（`include/` + `lib/`，不含运行期 DLL）。
 > 原因只是编译 LeviLamina 本体要上千个 TU、CI 上要十几分钟；依赖列表、define、linkdirs
-> 与官方 `versions/26_51_9.lua` 一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
+> 与官方 `versions/26_60_2.lua` 一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
 >
 > 想回到官方源码构建：删掉 `xmake-repo-extra/` 目录，并移除 `xmake.lua` 里的
 > `add_repositories("tmb-extra xmake-repo-extra")` 这一行。
 
-#### SDK 26.51.9 信息
+#### SDK 26.60.2 信息
 
 | 项 | 值 |
 | --- | --- |
-| SDK 版本 | 26.51.9（server / x64） |
+| SDK 版本 | 26.60.2（server / x64） |
 | 构建工具链 | clang-cl 23.1.4 + MSVC 14.44（VS 2022）+ Windows SDK 10.0.26100 |
-| 分发地址 | <https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.9> |
-| SHA256 | `33056860fc66676f41d9b11bcef082998a41967ce1ca8a1ea1c9da77861f086c` |
+| 分发地址 | <https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.60.2> |
+| SHA256 | `4af4fa41e679d4f5912e9bf9258984b60278e517d3e77c41a99314cb6fe53c0e` |
 
-重新打包：`pwsh tools/build-sdk.ps1 -Version 26.51.9`（需先在本机 `xmake f` 完成该版本的安装）。
+重新打包：`pwsh tools/build-sdk.ps1 -Version 26.60.2`（需先在本机 `xmake f` 完成该版本的安装）。
 
 
 ### CI / 自动发布
@@ -359,13 +362,19 @@ git tag v1.1.0 && git push origin main --tags
 | 领主本人 / PLand 管理员 | 无特权豁免 —— 领地禁怪是环境级设置，对所有人一致生效 |
 | 已存在的实体 | 只在「生成瞬间」拦截，**不清扫存量**（这是有意设计：避免误删玩家已驯养的生物） |
 | 生物在领地外生成后走进领地 | 不拦截（只拦生成，不做追踪驱逐） |
-| 脚本生成路径 | 依赖 `Level::$addEntity` 挂钩；若该挂钩安装失败，会在启用日志里明确告警，此时只剩通道 1/2 |
+| 脚本生成路径 | 主靠「新实体监视器」兜底（与路径无关）；`hook_actor_add` 安装失败只会少一层即时拦截，监视器仍在工作 |
 | 已驯服生物 | 默认跳过（`hook_skip_tamed: true`），想连宠物一起清就设为 false |
 
 ---
 
 ## 9. 版本
 
+- `2.0.0` — 适配 **LeviLamina 26.60**（只支持 26.60.x）：依赖线 `26.60.*` / PLand `0.26.*`，
+  安装目录改为 `mods/`，`tooth.json` 补上 `assets`；MCAPI 复核无新增申请；SDK 升级到 `sdk-v26.60.2`
+- `1.2.0` — 新实体监视器（通道 3 兜底）、新增 4 项监视器配置（结构版本 v4）
+- `1.1.1` — `/tmb sweep` 手动清理存量、诊断日志补充坐标/维度/驯服标记
+- `1.1.0` — 补脚本生成路径（`Level::$addEntity` 挂钩）、结构版本 v3
+- `1.0.1` — CI 自动构建与发版、改用预编译 SDK 分发
 - `1.0.0` — 首个版本：前置 + 后置双通道拦截、热重载、运行期符号解析与自检、权限布局自动校验
   - 配置文件改为 **JSONC**（`config.jsonc`），默认文件每个字段带中文注释，旧 `config.json` 自动迁移
   - 默认日志等级改为 `1`（仅 Error），避免拦截日志刷屏

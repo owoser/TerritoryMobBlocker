@@ -1,5 +1,45 @@
 # 更新日志
 
+## 2.0.0
+
+适配 **LeviLamina 26.60**（服务端 Bedrock 26.60.6）。这是一次**破坏性升级**：本版本只支持 26.60.x，
+仍在 26.51.x 的服务端请继续使用 1.2.0。
+
+### 变更
+
+- **升级到 LeviLamina 26.60.2**
+  - `tooth.json` 依赖 `github.com/LiteLDev/LeviLamina` 由 `26.51.*` 改为 `26.60.*`，
+    `github.com/IceBlcokMC/PLand` 由 `0.22.* || 0.23.* || 0.24.* || 0.25.*` 改为 `0.26.*`；
+  - 插件主版本号升到 **2.0.0**：依赖线一改，lip 就不会再把本版本装到 26.51 服务端上。
+- **安装目录改为 `mods/`**
+  LeviLamina 26.60 起服务端 Mod 目录由 `plugins/` 改为 `mods/`，同时 `tooth.json` 补上此前为空的
+  `assets`（原先 lip 安装其实不会落地任何文件）：
+  `placements = [{ type = "dir", src = "TerritoryMobBlocker/", dest = "mods/TerritoryMobBlocker" }]`。
+- **MCAPI 复核结果：无需申请新权限**
+  26.60.2 把 `Level.h` 的 `MCNAPI` 标记从 0 处提高到 410 处（整个 `include/mc` 共 55045 处），
+  本插件涉及的符号仍然全部可用：`Level::$addEntity`、`Actor::getOrCreateUniqueID`、`Actor::isTame`
+  都是 `MCAPI`（不是 `MCNAPI`）；`Actor::isAlive` / `Level::fetchEntity` / `Level::getRuntimeActorList`
+  是虚函数，走 vtable 不产生导入符号，只要不写成限定调用（`Level::fetchEntity(...)` 或 `&Level::fetchEntity`）就不会踩坑。
+  全量重新编译 12 个翻译单元：**0 warning / 0 error**，没有出现任何 `deprecated` 提示。
+
+### 工程
+
+- **预编译 SDK 升级到 `sdk-v26.60.2`**
+  <https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.60.2>，
+  SHA256 `4af4fa41e679d4f5912e9bf9258984b60278e517d3e77c41a99314cb6fe53c0e`。
+- **`tools/build-sdk.ps1` 按 `target_type` 精确选包**
+  同一版本在 `.xmake/packages/l/levilamina/<ver>` 下会同时存在 server / client 两份安装（哈希目录不同），
+  原先直接取第一项，可能把 client SDK 打成 server 包；现在按 `manifest.txt` 里的 `target_type` 匹配。
+- **本地包依赖对齐官方 `versions/26_60_2.lua`**
+  `parallel-hashmap` `v1.3.12` → `v2.0.0`（26.51.6 时代遗留的偏差，官方 26.51.9 起就是 v2.0.0），
+  `bedrockdata` → `v26.60.6-server.8` / `v26.60.5-client.8`。
+- **PLand 0.26.0 兼容性复核**
+  6 个导出符号的 mangled 名完全未变（`LandID = int64_t`、`LandDimid = int` 未变）；
+  `LandPermTable` 仍以 `EnvironmentPerms` 开头，前三个 bool 仍是
+  `allowFireSpread` / `allowMonsterSpawn` / `allowAnimalSpawn`，权限表偏移校验照常通过。
+
+---
+
 ## 1.2.0
 
 ### 新增

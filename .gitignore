@@ -36,6 +36,9 @@
 build
 bin
 
+# 构建日志
+*.log
+
 # VS Code & IDEs
 .vscode
 .vs

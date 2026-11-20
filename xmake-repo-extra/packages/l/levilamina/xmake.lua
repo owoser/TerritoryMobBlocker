@@ -18,12 +18,12 @@
 --
 --     error: invalid application of 'sizeof' to an incomplete type '...'
 --
---   clang 19 必现；升级到 clang-cl 23.1.4 后该 TU 可以正常通过，26.51.9 源码构建实测可用。
+--   clang 19 必现；升级到 clang-cl 23.1.4 后该 TU 可以正常通过（26.51.9 / 26.60.2 均实测可源码构建）。
 --   如果哪天不再需要预编译 SDK 加速，删掉本目录并移除 xmake.lua 里的
 --   add_repositories("tmb-extra xmake-repo-extra") 即可回到官方源码构建。
 --
 -- SDK 由本仓库 Release 分发：
---   https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.9
+--   https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.60.2
 -- ────────────────────────────────────────────────────────────────────────
 
 package("levilamina")
@@ -34,14 +34,14 @@ package("levilamina")
         "https://github.com/owoser/TerritoryMobBlocker/releases/download/sdk-v$(version)/levilamina-sdk-$(version)-server.zip",
         {alias = "sdk"}
     )
-    add_versions("sdk:26.51.9", "33056860fc66676f41d9b11bcef082998a41967ce1ca8a1ea1c9da77861f086c")
+    add_versions("sdk:26.60.2", "4af4fa41e679d4f5912e9bf9258984b60278e517d3e77c41a99314cb6fe53c0e")
 
     add_defines("ENTT_PACKED_PAGE=128", "ENTT_SPARSE_PAGE=4096", "ENTT_NO_MIXIN")
 
     add_configs("target_type", {default = "server", values = {"server", "client"}})
 
     on_load(function (package)
-        -- 与 levimc-repo 的 versions/26_51_9.lua 保持一致：
+        -- 与 levimc-repo 的 versions/26_60_2.lua 保持一致：
         -- 这些传递依赖仍由 xmake 正常安装，本包只提供 levilamina 自身的 include/lib。
         local deps_common = {
             "entt v4.0.0",
@@ -57,7 +57,7 @@ package("levilamina")
             "pcg_cpp v1.0.0",
             "pfr 2.1.1",
             "symbolprovider v1.3.0",
-            "parallel-hashmap v1.3.12",
+            "parallel-hashmap v2.0.0",
             "concurrentqueue v1.0.4",
             "stb 2025.03.14"
         }
@@ -67,10 +67,10 @@ package("levilamina")
 
         -- bedrockdata 提供 prelink 阶段需要的 bedrock_runtime_data
         if package:config("target_type") == "server" then
-            package:add("deps", "bedrockdata v26.51.1-server.12")
+            package:add("deps", "bedrockdata v26.60.6-server.8")
             package:add("defines", "LL_PLAT_S")
         else
-            package:add("deps", "bedrockdata v26.51.1-client.12")
+            package:add("deps", "bedrockdata v26.60.5-client.8")
             package:add("defines", "LL_PLAT_C")
         end
     end)

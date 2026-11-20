@@ -4,7 +4,7 @@
  * PLand 运行期桥接层
  *
  * 设计要点：
- *   PLand 是运行期插件（plugins/PLand/PLand.dll），本插件不在链接期引用它的导入库，
+ *   PLand 是运行期插件（mods/PLand/PLand.dll），本插件不在链接期引用它的导入库，
  *   而是启动时通过 LL 的 ModManagerRegistry 取得模块句柄，再用 GetProcAddress 逐个解析
  *   所需的导出符号。
  *

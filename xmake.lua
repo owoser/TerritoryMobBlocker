@@ -6,24 +6,25 @@ end
 
 -- 本地补丁仓库：把 levilamina 的 on_install 换成「预编译 SDK」下载，免去每次编译上游本体。
 --
--- 上游 LeviLamina 26.51.9 在 clang-cl 23 下可从源码构建（clang 19 会触发
--- MinecraftCommands.h 的 incomplete type 错误），所以预编译 SDK 现在只是构建加速手段，
--- 不是绕开上游编译失败的补丁，详见 xmake-repo-extra/packages/l/levilamina/xmake.lua。
+-- 上游 LeviLamina 26.60.2 在 clang-cl 23 下可从源码构建（clang 19 会触发
+-- MinecraftCommands.h 的 incomplete type 错误），所以预编译 SDK 只是构建加速手段
+-- （上游本体上千个 TU，CI 上要十几分钟），不是绕开编译失败的补丁。
+-- 详见 xmake-repo-extra/packages/l/levilamina/xmake.lua。
 -- 必须放在 levimc-repo 之前：同名包以先注册者为准。
 add_repositories("tmb-extra xmake-repo-extra")
 add_repositories("levimc-repo https://github.com/LiteLDev/xmake-repo.git")
 
--- 说明：LeviLamina SDK 版本线需与服务器实际部署的 LL3 保持同一 26.51.x 小版本线。
--- 这里锁定 26.51.9（clang-cl 23 构建、本机验证可用的版本），不使用浮动版本，
+-- 说明：LeviLamina SDK 版本线需与服务器实际部署的 LL3 保持同一小版本线。
+-- 这里锁定 26.60.2（clang-cl 23 构建、本机验证可用的版本），不使用浮动版本，
 -- 避免上游小版本升级悄悄改变 ABI / 依赖版本。
 if is_config("target_type", "server") then
-    add_requires("levilamina 26.51.9", { configs = { target_type = "server" } })
+    add_requires("levilamina 26.60.2", { configs = { target_type = "server" } })
 else
-    add_requires("levilamina 26.51.9", { configs = { target_type = "client" } })
+    add_requires("levilamina 26.60.2", { configs = { target_type = "client" } })
 end
 
 -- 强制所有传递依赖使用同一份 levilamina，避免 ABI 混用
-add_requireconfs("**.levilamina", { override = true, version = "26.51.9", configs = { target_type = "server" } })
+add_requireconfs("**.levilamina", { override = true, version = "26.60.2", configs = { target_type = "server" } })
 
 add_requires("levibuildscript")
 
@@ -94,7 +95,7 @@ target("TerritoryMobBlocker")
         add_defines("LL_PLAT_C")
     end
 
-    -- 护栏：LeviLamina 26.51.x 的 MinecraftCommands.h 在 clang 19 上会触发
+    -- 护栏：LeviLamina 26.51+ 的 MinecraftCommands.h 在 clang 19 上会触发
     --   error: invalid application of 'sizeof' to an incomplete type
     -- 必须用 clang-cl >= 23。VS 2022 自带的 Clang 组件只有 19.1.5，如果 PATH 里
     -- 先命中了它（例如在 VS 开发人员命令提示符里构建），这里直接给出可读的报错，
@@ -117,7 +118,7 @@ target("TerritoryMobBlocker")
         local major = os.iorunv(clangCl, {"--version"}):match("clang version (%d+)")
         if major and tonumber(major) < 23 then
             raise(
-                "LeviLamina 26.51.9 需要 clang-cl >= 23，当前 PATH 里先找到的 clang-cl 是 %s.x（%s）。\n" ..
+                "LeviLamina 26.60.2 需要 clang-cl >= 23，当前 PATH 里先找到的 clang-cl 是 %s.x（%s）。\n" ..
                 "请安装 LLVM 23（https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.4），\n" ..
                 "并把它的 bin 目录放到 PATH 最前面；VS 2022 自带的 19.1.5 不够。",
                 major, clangCl
