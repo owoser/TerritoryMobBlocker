@@ -12,6 +12,9 @@
 
 #include "mc/legacy/ActorUniqueID.h"
 #include "mc/deps/ecs/gamerefs_entity/EntityContext.h"
+// 26.51.9 起 OwnerPtr<T> 继承自 GameRefs<T>::OwnerStorage，必须先把 GameRefs<EntityContext>
+// 的偏特化定义引进来，否则 OwnerPtr<EntityContext> 会在 Hook 签名里报 incomplete type。
+#include "mc/deps/ecs/gamerefs_entity/GameRefsEntity.h"
 #include "mc/deps/game_refs/OwnerPtr.h"
 #include "mc/world/actor/Actor.h"
 #include "mc/world/level/BlockSource.h"

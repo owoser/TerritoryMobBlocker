@@ -256,7 +256,7 @@ LeviLamina 的启动顺序是**先把所有 Mod 全部 `load()`，再按依赖�
 
 ```
 TerritoryMobBlocker/
-├── xmake.lua                     # 构建配置（levilamina 26.51.6 + levibuildscript，无 pland 依赖）
+├── xmake.lua                     # 构建配置（levilamina 26.51.9 + levibuildscript，无 pland 依赖）
 ├── manifest.json                 # 模组清单（强依赖 PLand）
 ├── tooth.json                    # lip 包元数据
 ├── xmake-repo-extra/             # 本地 xmake 仓库：levilamina 预编译 SDK 包定义
@@ -290,41 +290,41 @@ xmake
 
 产物：`bin/TerritoryMobBlocker/{TerritoryMobBlocker.dll, TerritoryMobBlocker.pdb, manifest.json}`
 
-> **SDK 分发说明（重要）**：上游 LeviLamina **26.51.x 目前无法从源码编译**——
+> 切换 LLVM 大版本后要加 `-c` 重新探测工具链（xmake 会缓存 clang-cl 的绝对路径）：
+> `xmake f -c -y -p windows -a x64 -m release`。`xmake.lua` 里有一道护栏，
+> 若 PATH 里先命中的 clang-cl < 23 会直接报错提示，而不是等到编译上游头文件才失败。
+
+> **工具链要求（重要）**：LeviLamina 26.51.x 需要 **clang-cl 23**。
 > `mc/server/commands/MinecraftCommands.h` 用 `unique_ptr<T>` 保存了仅前向声明的 `T`
 > （`CommandRegistry` / `CommandOutputSender` / `Command` / `DeferredCommandBase`），
-> 同时又声明 `virtual ~MinecraftCommands() = default;`，任何实例化该析构函数的翻译单元
-> 都会触发 MSVC STL 的断言 `error: invalid application of 'sizeof' to an incomplete type`。
-> 这与编译器版本无关（clang 19/22、MSVC 14.44/14.51 均可复现）。
->
-> 因此本项目改为**分发预编译 SDK**：`xmake-repo-extra/packages/l/levilamina/xmake.lua`
+> 同时又声明 `virtual ~MinecraftCommands() = default;`，clang 19 实例化该析构函数时会触发
+> MSVC STL 的断言 `error: invalid application of 'sizeof' to an incomplete type`；
+> 升级到 **clang-cl 23.1.4** 后该错误消失（本机实测 26.51.9 可从源码构建通过）。
+> VS 2022 自带的 Clang 组件是 19.1.5，**不够**，需要单独安装 LLVM 23
+> （[LLVM-23.1.4-win64.msi](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.4)），
+> 并让 `clang-cl` 在 PATH 中先于 `VC\Tools\Llvm\x64\bin` 被找到。
+
+> **SDK 分发说明**：本项目仍**分发预编译 SDK**——`xmake-repo-extra/packages/l/levilamina/xmake.lua`
 > 与官方包同名同结构，只把 `on_install` 换成下载
-> [`sdk-v26.51.6`](https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.6)
-> 的 `levilamina-sdk-26.51.6-server.zip`（`include/` + `lib/`，不含运行期 DLL）。
-> 依赖列表、define、linkdirs 与官方一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
+> [`sdk-v26.51.9`](https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.9)
+> 的 `levilamina-sdk-26.51.9-server.zip`（`include/` + `lib/`，不含运行期 DLL）。
+> 原因只是编译 LeviLamina 本体要上千个 TU、CI 上要十几分钟；依赖列表、define、linkdirs
+> 与官方 `versions/26_51_9.lua` 一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
 >
-> 上游修好后：删掉 `xmake-repo-extra/` 目录，并移除 `xmake.lua` 里的
-> `add_repositories("tmb-extra xmake-repo-extra")` 这一行，即回到官方源码构建。
+> 想回到官方源码构建：删掉 `xmake-repo-extra/` 目录，并移除 `xmake.lua` 里的
+> `add_repositories("tmb-extra xmake-repo-extra")` 这一行。
 
-#### 为什么 SDK 是 26.51.6，而不是最新的 26.51.9？
+#### SDK 26.51.9 信息
 
-因为**没有** 26.51.9 的 SDK 可以拿到：
-
-| 来源 | 结果 |
+| 项 | 值 |
 | --- | --- |
-| 从源码构建（xmake-repo 官方包） | ✗ 26.51.6 与 26.51.9 **都**编译失败，同一个 incomplete type 错误 |
-| 官方 Release 附件 | ✗ 只有运行期 DLL，**不含** `include/` 与 `LeviLamina.lib` |
-| 官方 Actions 产物 | ✗ 只有文档站（doxygen / pages），没有 SDK 包 |
+| SDK 版本 | 26.51.9（server / x64） |
+| 构建工具链 | clang-cl 23.1.4 + MSVC 14.44（VS 2022）+ Windows SDK 10.0.26100 |
+| 分发地址 | <https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.51.9> |
+| SHA256 | `33056860fc66676f41d9b11bcef082998a41967ce1ca8a1ea1c9da77861f086c` |
 
-26.51.6 的 SDK 是这台机器在 2026-10-11 构建成功留下的产物，是唯一可用的 SDK。
-它在**符号层面与 26.51.8 / 26.51.9 兼容**：
+重新打包：`pwsh tools/build-sdk.ps1 -Version 26.51.9`（需先在本机 `xmake f` 完成该版本的安装）。
 
-- 本插件 DLL 从 `LeviLamina.dll` 导入 **37 个**导出符号；
-- 逐条比对 26.51.8（线上服务器）与 26.51.9（最新版）的 LeviLamina.dll 导出表，**全部命中**；
-- 实测已在 26.51.8 的服务器上正常运行。
-
-等上游修好 `MinecraftCommands.h`、本机能重新 `xmake f` 之后，用
-`tools/build-sdk.ps1 -Version 26.51.9` 重新打包 SDK 并更新包定义里的 sha256 即可升级。
 
 ### CI / 自动发布
 
@@ -333,8 +333,8 @@ xmake
 | [`build.yml`](.github/workflows/build.yml) | push 到 `main` / PR / 手动 | 配置 + 构建，上传 `TerritoryMobBlocker-windows-x64` artifact 作为构建验证 |
 | [`release.yml`](.github/workflows/release.yml) | 推送 `v*` tag / 手动 | 构建 → 打包 `TerritoryMobBlocker-<ver>.zip` → 创建或更新 Release，正文自动从 `CHANGELOG.md` 对应版本段落提取 |
 
-CI 固定 `windows-2022` + `clang-cl 19.1.5`（本地验证通过的组合），并缓存 `~/.xmake`，
-首次构建约 5 分钟、命中缓存后更快。
+CI 固定 `windows-2022` + `clang-cl 23.1.4`（本地验证通过的组合，经 `ZhongRuoyu/setup-llvm` 安装，
+与上游 LeviLamina CI 同款做法），并缓存 `~/.xmake`，首次构建约 5 分钟、命中缓存后更快。
 
 发版流程只剩三步：
 

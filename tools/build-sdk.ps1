@@ -17,7 +17,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $Version = "26.51.6",
+    [string] $Version = "26.51.9",
     [string] $TargetType = "server",
     [string] $OutputDir = "$PSScriptRoot\..\bin"
 )

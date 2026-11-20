@@ -4,26 +4,26 @@ if is_plat("windows") then
     set_toolchains("clang-cl")
 end
 
--- 本地补丁仓库：提供 levilamina 的「预编译 SDK」包定义，替代从源码构建。
+-- 本地补丁仓库：把 levilamina 的 on_install 换成「预编译 SDK」下载，免去每次编译上游本体。
 --
--- 上游 LeviLamina 26.51.x 目前无法从源码编译（MinecraftCommands.h 对 unique_ptr 的
--- 前向声明 + 默认析构会触发 MSVC STL 的 incomplete type 断言，与编译器版本无关），
--- 详见 xmake-repo-extra/packages/l/levilamina/xmake.lua 的说明。
+-- 上游 LeviLamina 26.51.9 在 clang-cl 23 下可从源码构建（clang 19 会触发
+-- MinecraftCommands.h 的 incomplete type 错误），所以预编译 SDK 现在只是构建加速手段，
+-- 不是绕开上游编译失败的补丁，详见 xmake-repo-extra/packages/l/levilamina/xmake.lua。
 -- 必须放在 levimc-repo 之前：同名包以先注册者为准。
 add_repositories("tmb-extra xmake-repo-extra")
 add_repositories("levimc-repo https://github.com/LiteLDev/xmake-repo.git")
 
 -- 说明：LeviLamina SDK 版本线需与服务器实际部署的 LL3 保持同一 26.51.x 小版本线。
--- 这里锁定 26.51.6（本机已缓存、验证可用的构建产物）；26.51.7+ 上游包在当前工具链下
--- 存在自身编译失败（MinecraftCommands 前置声明不完整），故不使用浮动版本。
+-- 这里锁定 26.51.9（clang-cl 23 构建、本机验证可用的版本），不使用浮动版本，
+-- 避免上游小版本升级悄悄改变 ABI / 依赖版本。
 if is_config("target_type", "server") then
-    add_requires("levilamina 26.51.6", { configs = { target_type = "server" } })
+    add_requires("levilamina 26.51.9", { configs = { target_type = "server" } })
 else
-    add_requires("levilamina 26.51.6", { configs = { target_type = "client" } })
+    add_requires("levilamina 26.51.9", { configs = { target_type = "client" } })
 end
 
 -- 强制所有传递依赖使用同一份 levilamina，避免 ABI 混用
-add_requireconfs("**.levilamina", { override = true, version = "26.51.6", configs = { target_type = "server" } })
+add_requireconfs("**.levilamina", { override = true, version = "26.51.9", configs = { target_type = "server" } })
 
 add_requires("levibuildscript")
 
@@ -93,3 +93,34 @@ target("TerritoryMobBlocker")
     else
         add_defines("LL_PLAT_C")
     end
+
+    -- 护栏：LeviLamina 26.51.x 的 MinecraftCommands.h 在 clang 19 上会触发
+    --   error: invalid application of 'sizeof' to an incomplete type
+    -- 必须用 clang-cl >= 23。VS 2022 自带的 Clang 组件只有 19.1.5，如果 PATH 里
+    -- 先命中了它（例如在 VS 开发人员命令提示符里构建），这里直接给出可读的报错，
+    -- 而不是等编译上游头文件时才炸。
+    on_load(function (target)
+        if not is_plat("windows") then
+            return
+        end
+        local clangCl = nil
+        for _, dir in ipairs(path.splitenv(os.getenv("PATH") or "")) do
+            local exe = path.join(dir, "clang-cl.exe")
+            if os.isfile(exe) then
+                clangCl = exe
+                break
+            end
+        end
+        if not clangCl then
+            return
+        end
+        local major = os.iorunv(clangCl, {"--version"}):match("clang version (%d+)")
+        if major and tonumber(major) < 23 then
+            raise(
+                "LeviLamina 26.51.9 需要 clang-cl >= 23，当前 PATH 里先找到的 clang-cl 是 %s.x（%s）。\n" ..
+                "请安装 LLVM 23（https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.4），\n" ..
+                "并把它的 bin 目录放到 PATH 最前面；VS 2022 自带的 19.1.5 不够。",
+                major, clangCl
+            )
+        end
+    end)
