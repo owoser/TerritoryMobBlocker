@@ -4,14 +4,11 @@ if is_plat("windows") then
     set_toolchains("clang-cl")
 end
 
--- 本地补丁仓库：把 levilamina 的 on_install 换成「预编译 SDK」下载，免去每次编译上游本体。
---
--- 上游 LeviLamina 26.60.2 在 clang-cl 23 下可从源码构建（clang 19 会触发
--- MinecraftCommands.h 的 incomplete type 错误），所以预编译 SDK 只是构建加速手段
--- （上游本体上千个 TU，CI 上要十几分钟），不是绕开编译失败的补丁。
--- 详见 xmake-repo-extra/packages/l/levilamina/xmake.lua。
--- 必须放在 levimc-repo 之前：同名包以先注册者为准。
-add_repositories("tmb-extra xmake-repo-extra")
+-- 直接用官方 levimc-repo 的 levilamina 包（源码构建）。
+-- 曾经有一份 xmake-repo-extra/ 把 on_install 换成下载预编译 SDK，只为省 CI 时间；
+-- 现在 clang 19 的那个 incomplete type 问题早被 clang-cl 23 解决，源码构建实测
+-- configure 3 分 40 秒、单次构建后包进 ~/.xmake/packages 被 actions/cache 复用，
+-- 省下的时间不值一份要手工重建、手工写 sha256 的 11MB 二进制。故移除。
 add_repositories("levimc-repo https://github.com/LiteLDev/xmake-repo.git")
 
 -- 说明：LeviLamina SDK 版本线需与服务器实际部署的 LL3 保持同一小版本线。

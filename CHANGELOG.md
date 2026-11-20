@@ -1,5 +1,21 @@
 # 更新日志
 
+## 未发布
+
+### 构建
+
+- **移除预编译 SDK 分发，回归官方 `levimc-repo` 源码构建**
+  - 删除 `xmake-repo-extra/`（把 levilamina 的 `on_install` 换成下载预编译 SDK 的本地包定义）
+    与 `tools/build-sdk.ps1`，`xmake.lua` 不再注册 `tmb-extra` 仓库。
+  - 起因：这套机制原本是为了绕开 clang 19 编译 `MinecraftCommands.h` 时的
+    `invalid application of 'sizeof' to an incomplete type`（LLVM 的 bug）。clang-cl 23 早已修复，
+    源码构建不再是「绕开失败」，而只是省时间——本机实测 configure（拉 LL 源码 + 编译本体）**3 分 40 秒**，
+    装好的包落在 `~/.xmake/packages` 并被 `actions/cache` 复用，只有 LL 版本号变化时才重编一次。
+  - 顺带消除一类风险：整段替换 `on_install` 意味着上游改依赖我们不会自动跟上
+    （此前 `parallel-hashmap` 就停留在 v1.3.12、落后官方 26.60.2 的 v2.0.0），
+    也不再需要为每次 LL 升级手工重打包 11MB 二进制 + 双写 sha256。
+  - CI 缓存 key 随之简化为 `hashFiles('xmake.lua')`。
+
 ## 2.0.0
 
 适配 **LeviLamina 26.60**（服务端 Bedrock 26.60.6）。这是一次**破坏性升级**：本版本只支持 26.60.x，

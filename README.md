@@ -262,7 +262,6 @@ TerritoryMobBlocker/
 ├── xmake.lua                     # 构建配置（levilamina 26.60.2 + levibuildscript，无 pland 依赖）
 ├── manifest.json                 # 模组清单（强依赖 PLand）
 ├── tooth.json                    # lip 包元数据
-├── xmake-repo-extra/             # 本地 xmake 仓库：levilamina 预编译 SDK 包定义
 ├── src/
 │   ├── Entry/                    # Mod 生命周期 + MemoryOperators
 │   ├── Config/
@@ -307,26 +306,12 @@ xmake
 > （[LLVM-23.1.4-win64.msi](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.4)），
 > 并让 `clang-cl` 在 PATH 中先于 `VC\Tools\Llvm\x64\bin` 被找到。
 
-> **SDK 分发说明**：本项目仍**分发预编译 SDK**——`xmake-repo-extra/packages/l/levilamina/xmake.lua`
-> 与官方包同名同结构，只把 `on_install` 换成下载
-> [`sdk-v26.60.2`](https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.60.2)
-> 的 `levilamina-sdk-26.60.2-server.zip`（`include/` + `lib/`，不含运行期 DLL）。
-> 原因只是编译 LeviLamina 本体要上千个 TU、CI 上要十几分钟；依赖列表、define、linkdirs
-> 与官方 `versions/26_60_2.lua` 一致，`@levibuildscript/linkrule` 的 prelink 流程不受影响。
->
-> 想回到官方源码构建：删掉 `xmake-repo-extra/` 目录，并移除 `xmake.lua` 里的
-> `add_repositories("tmb-extra xmake-repo-extra")` 这一行。
-
-#### SDK 26.60.2 信息
-
-| 项 | 值 |
-| --- | --- |
-| SDK 版本 | 26.60.2（server / x64） |
-| 构建工具链 | clang-cl 23.1.4 + MSVC 14.44（VS 2022）+ Windows SDK 10.0.26100 |
-| 分发地址 | <https://github.com/owoser/TerritoryMobBlocker/releases/tag/sdk-v26.60.2> |
-| SHA256 | `4af4fa41e679d4f5912e9bf9258984b60278e517d3e77c41a99314cb6fe53c0e` |
-
-重新打包：`pwsh tools/build-sdk.ps1 -Version 26.60.2`（需先在本机 `xmake f` 完成该版本的安装）。
+> **关于预编译 SDK（已移除）**：v2.0.0 及之前，本项目用 `xmake-repo-extra/` 提供一份
+> 预编译 LeviLamina SDK 来省 CI 时间。现在已回归官方 `levimc-repo` 的源码构建：
+> clang 19 的 incomplete type 问题早已被 clang-cl 23 解决，源码构建本机实测 configure
+> 3 分 40 秒，且装好的包落在 `~/.xmake/packages` 被 `actions/cache` 复用，后续构建不再重复编译。
+> 维护一份要手工重建、手工写 sha256 的 11MB 二进制并不划算，还少了「整段替换 `on_install`
+> 导致依赖版本悄悄漂移」的风险（此前 `parallel-hashmap` 就漏跟过一次）。
 
 
 ### CI / 自动发布
@@ -369,6 +354,7 @@ git tag v1.1.0 && git push origin main --tags
 
 ## 9. 版本
 
+- `2.0.1`（未发布）— 移除预编译 SDK 分发，回归官方 `levimc-repo` 源码构建
 - `2.0.0` — 适配 **LeviLamina 26.60**（只支持 26.60.x）：依赖线 `26.60.*` / PLand `0.26.*`，
   安装目录改为 `mods/`，`tooth.json` 补上 `assets`；MCAPI 复核无新增申请；SDK 升级到 `sdk-v26.60.2`
 - `1.2.0` — 新实体监视器（通道 3 兜底）、新增 4 项监视器配置（结构版本 v4）
